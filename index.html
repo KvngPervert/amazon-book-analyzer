@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon Book Analyzer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        
+        .search-section {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .search-box {
+            display: flex;
+            gap: 15px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        #keywordInput {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        #keywordInput:focus {
+            border-color: #667eea;
+        }
+        
+        #analyzeBtn {
+            padding: 15px 25px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        #analyzeBtn:hover:not(:disabled) {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+        }
+        
+        #analyzeBtn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .results-section {
+            padding: 30px;
+        }
+        
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid #e9ecef;
+            transition: transform 0.3s;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card h3 {
+            color: #6c757d;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+        
+        .card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .scoring-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .scoring-title {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #495057;
+            font-size: 1.5rem;
+        }
+        
+        .scoring-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .score-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .score-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin: 0 auto 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .score-label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #495057;
+        }
+        
+        .score-value {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        
+        .table-container {
+            overflow-x: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        
+        th {
+            background: #4a5568;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f7fafc;
+        }
+        
+        tr:hover {
+            background-color: #edf2f7;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+            border: 1px solid #fcc;
+        }
+        
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+            border: 1px solid #cfc;
+        }
+        
+        @media (max-width: 768px) {
+            .search-box {
+                flex-direction: column;
+            }
+            
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .scoring-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Amazon Book Analyzer</h1>
+            <p>Analyze competition and profitability for Amazon book publishing</p>
+        </div>
+        
+        <div class="search-section">
+            <div class="search-box">
+                <input type="text" id="keywordInput" placeholder="Enter keyword (e.g., keto cookbook)..." />
+                <button id="analyzeBtn">Analyze Keyword</button>
+            </div>
+        </div>
+        
+        <div class="results-section">
+            <div id="results">
+                <div class="loading">
+                    <p>Enter a keyword above to analyze Amazon book competition</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const btn = document.getElementById('analyzeBtn');
+            const input = document.getElementById('keywordInput');
+            const results = document.getElementById('results');
+            
+            // Add Enter key support
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    analyzeKeyword();
+                }
+            });
+            
+            btn.addEventListener('click', analyzeKeyword);
+            
+            async function analyzeKeyword() {
+                const keyword = input.value.trim();
+                if (!keyword) {
+                    showError('Please enter a keyword');
+                    return;
+                }
+                
+                btn.disabled = true;
+                btn.textContent = 'Analyzing...';
+                showLoading();
+                
+                try {
+                    // For now, simulate the analysis
+                    // Later we'll connect to the backend
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    // Mock data for demonstration
+                    const mockData = {
+                        keyword: keyword,
+                        totalResults: Math.floor(Math.random() * 50000) + 1000,
+                        avgBSR: Math.floor(Math.random() * 100000) + 10000,
+                        avgReviews: Math.floor(Math.random() * 5000) + 100,
+                        items: generateMockItems(keyword, 20)
+                    };
+                    
+                    showResults(mockData);
+                    
+                } catch (err) {
+                    showError(`Error: ${err.message}`);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Analyze Keyword';
+                }
+            }
+            
+            function generateMockItems(keyword, count) {
+                const items = [];
+                for (let i = 0; i < count; i++) {
+                    items.push({
+                        title: `${keyword.charAt(0).toUpperCase() + keyword.slice(1)} Book ${i + 1}`,
+                        asin: `B0${Math.floor(Math.random() * 1000000000)}`,
+                        price: (Math.random() * 20 + 5).toFixed(2),
+                        bsr: Math.floor(Math.random() * 200000) + 1000,
+                        rating: (Math.random() * 2 + 3).toFixed(1),
+                        reviews: Math.floor(Math.random() * 5000) + 50
+                    });
+                }
+                return items;
+            }
+            
+            function showLoading() {
+                results.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Analyzing "${input.value.trim()}" on Amazon...</p>
+                        <p>This may take a few seconds</p>
+                    </div>
+                `;
+            }
+            
+            function showError(message) {
+                results.innerHTML = `<div class="error">${message}</div>`;
+            }
+            
+            function showSuccess(message) {
+                results.innerHTML = `<div class="success">${message}</div>`;
+            }
+            
+            function showResults(data) {
+                // Calculate scores (mock for now)
+                const scores = calculateMockScores(data);
+                
+                results.innerHTML = `
+                    <div class="summary-cards">
+                        <div class="card">
+                            <h3>TOTAL RESULTS</h3>
+                            <div class="value">${data.totalResults.toLocaleString()}</div>
+                        </div>
+                        <div class="card">
+                            <h3>AVERAGE BSR</h3>
+                            <div class="value">${data.avgBSR.toLocaleString()}</div>
+                        </div>
+                        <div class="card">
+                            <h3>AVERAGE REVIEWS</h3>
+                            <div class="value">${data.avgReviews.toLocaleString()}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="scoring-section">
+                        <div class="scoring-title">MARKET SCORING</div>
+                        <div class="scoring-grid">
+                            <div class="score-card">
+                                <div class="score-circle" style="background:${getScoreColor(scores.popularity.score)}">${getScoreEmoji(scores.popularity.score)}</div>
+                                <div class="score-label">Popularity</div>
+                                <div class="score-value">${scores.popularity.score.toUpperCase()}</div>
+                            </div>
+                            <div class="score-card">
+                                <div class="score-circle" style="background:${getScoreColor(scores.profitability.score)}">${getScoreEmoji(scores.profitability.score)}</div>
+                                <div class="score-label">Profitability</div>
+                                <div class="score-value">${scores.profitability.score.toUpperCase()}</div>
+                            </div>
+                            <div class="score-card">
+                                <div class="score-circle" style="background:${getScoreColor(scores.competition.score)}">${getScoreEmoji(scores.competition.score)}</div>
+                                <div class="score-label">Competition</div>
+                                <div class="score-value">${scores.competition.score.toUpperCase()}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:5%;">#</th>
+                                    <th style="width:35%;">Book Title</th>
+                                    <th style="width:15%;">ASIN</th>
+                                    <th style="width:10%;">Price</th>
+                                    <th style="width:15%;">BSR</th>
+                                    <th style="width:10%;">Rating</th>
+                                    <th style="width:10%;">Reviews</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.items.map((item, index) => `
+                                    <tr>
+                                        <td>${index + 1}</td>
+                                        <td>${truncateTitle(item.title)}</td>
+                                        <td style="font-family:monospace;">${item.asin.substring(0, 10)}</td>
+                                        <td style="text-align:right;">$${parseFloat(item.price).toFixed(2)}</td>
+                                        <td style="text-align:right;">${item.bsr.toLocaleString()}</td>
+                                        <td style="text-align:right;">${parseFloat(item.rating).toFixed(1)}</td>
+                                        <td style="text-align:right;">${item.reviews.toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+            
+            function calculateMockScores(data) {
+                // Mock scoring logic - will be replaced with real logic
+                return {
+                    popularity: { score: Math.random() > 0.5 ? 'green' : Math.random() > 0.5 ? 'yellow' : 'red' },
+                    profitability: { score: Math.random() > 0.5 ? 'green' : Math.random() > 0.5 ? 'yellow' : 'red' },
+                    competition: { score: Math.random() > 0.5 ? 'green' : Math.random() > 0.5 ? 'yellow' : 'red' }
+                };
+            }
+            
+            function getScoreColor(score) {
+                switch(score) {
+                    case 'green': return '#4CAF50';
+                    case 'yellow': return '#FFC107';
+                    case 'red': return '#F44336';
+                    default: return '#9E9E9E';
+                }
+            }
+            
+            function getScoreEmoji(score) {
+                switch(score) {
+                    case 'green': return '🟢';
+                    case 'yellow': return '🟡';
+                    case 'red': return '🔴';
+                    default: return '⚪';
+                }
+            }
+            
+            function truncateTitle(title) {
+                if (!title) return 'No title';
+                
+                // Truncate at colon
+                const colonIndex = title.indexOf(':');
+                if (colonIndex > 0) {
+                    title = title.substring(0, colonIndex);
+                }
+                
+                // Limit length
+                if (title.length > 45) {
+                    return title.substring(0, 42) + '...';
+                }
+                return title;
+            }
+        });
+    </script>
+</body>
+</html>
