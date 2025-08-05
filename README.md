@@ -1,2 +1,2 @@
-# amaazon-book-analyzer
+# amazon-book-analyzer
 This for my keyword research 
