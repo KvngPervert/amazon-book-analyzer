@@ -10,8 +10,13 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from frontend
+// Serve static files from public folder (if exists)
 app.use(express.static('public'));
+
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ message: 'Amazon Book Analyzer API is running!' });
+});
 
 // API endpoint for analyzing keywords
 app.get('/api/analyze', async (req, res) => {
@@ -50,7 +55,7 @@ async function scrapeAmazonData(keyword) {
   let browser;
   
   try {
-    // Launch browser
+    // Launch browser with Render-friendly settings
     browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -60,7 +65,10 @@ async function scrapeAmazonData(keyword) {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins',
+        '--disable-site-isolation-trials'
       ]
     });
     
@@ -100,34 +108,37 @@ async function scrapeAmazonData(keyword) {
       }
     }
     
-    // Extract book data
-    const items = [];
+    // Extract search results
     const bookElements = $('[data-component-type="s-search-result"]');
+    const items = [];
     
     // Process first 20 items
-    for (let i = 0; i < Math.min(bookElements.length, 20); i++) {
-      const element = bookElements.eq(i);
-      const text = element.text();
+    bookElements.each((index, element) => {
+      if (index >= 20) return;
       
       try {
+        const $element = $(element);
+        const text = $element.text();
+        
         // Extract title
         let title = '';
-        const titleElement = element.find('h2 a span').first() || 
-                            element.find('h2 .a-text-normal').first() ||
-                            element.find('h2 a').first();
+        const titleElement = $element.find('h2 a span').first() || 
+                            $element.find('h2 .a-text-normal').first() ||
+                            $element.find('h2 a').first() ||
+                            $element.find('h2').first();
         
         if (titleElement.length > 0) {
           title = titleElement.text().trim();
         }
         
-        if (!title || title.length < 5) continue;
+        if (!title || title.length < 5) return;
         
         // Extract ASIN
-        let asin = element.attr('data-asin') || 'N/A';
+        let asin = $element.attr('data-asin') || 'N/A';
         
         // Extract price
         let price = 0;
-        const priceElement = element.find('.a-price-whole');
+        const priceElement = $element.find('.a-price-whole');
         if (priceElement.length > 0) {
           const priceText = priceElement.text();
           const priceMatch = priceText.match(/[\d.]+/);
@@ -136,7 +147,7 @@ async function scrapeAmazonData(keyword) {
           }
         }
         
-        // Extract BSR - multiple patterns
+        // Extract BSR - multiple patterns for better coverage
         let bsr = 999999;
         const bsrPatterns = [
           /Best\s*Sellers?\s*Rank.*?[#]([0-9,]+)/i,
@@ -155,7 +166,7 @@ async function scrapeAmazonData(keyword) {
         
         // Extract rating
         let rating = 0;
-        const ratingElement = element.find('.a-icon-alt');
+        const ratingElement = $element.find('.a-icon-alt');
         if (ratingElement.length > 0) {
           const ratingText = ratingElement.text();
           const ratingMatch = ratingText.match(/(\d+\.?\d*)\s*out\s*of/);
@@ -164,16 +175,16 @@ async function scrapeAmazonData(keyword) {
           }
         }
         
-        // Extract reviews - focus on numbers only
+        // Extract reviews - FOCUS ON NUMBERS ONLY
         let reviews = 0;
         
-        // Pattern 1: "(1,234 ratings)"
-        const parenMatch = text.match(/\(([\d,]+)\s*(?:ratings?|reviews?)\)/i);
+        // Pattern 1: "(31,919 ratings)"
+        const parenMatch = text.match(/\(([\d,]+)\s*(?:ratings?|reviews?)/i);
         if (parenMatch) {
           reviews = parseInt(parenMatch[1].replace(/,/g, ''));
         }
         
-        // Pattern 2: "1,234 global ratings"
+        // Pattern 2: "31,919 global ratings"
         if (reviews === 0) {
           const globalMatch = text.match(/([\d,]+)\s+global\s+(?:ratings?|reviews?)/i);
           if (globalMatch) {
@@ -181,7 +192,7 @@ async function scrapeAmazonData(keyword) {
           }
         }
         
-        // Pattern 3: "1,234 ratings"
+        // Pattern 3: "31,919 ratings"
         if (reviews === 0) {
           const reviewMatch = text.match(/([\d,]+)\s+(?:ratings?|reviews?)/i);
           if (reviewMatch) {
@@ -199,12 +210,12 @@ async function scrapeAmazonData(keyword) {
         });
         
       } catch (e) {
-        console.log(`Error processing item ${i}:`, e.message);
-        continue;
+        // Skip problematic elements
+        console.log('Error processing item:', e.message);
       }
-    }
+    });
     
-    // Calculate averages
+    // Calculate averages using ALL items on the page
     const validBSRs = items.filter(item => item.bsr > 0 && item.bsr < 999999).map(item => item.bsr);
     const avgBSR = validBSRs.length > 0 ? 
       Math.round(validBSRs.reduce((sum, bsr) => sum + bsr, 0) / validBSRs.length) : 0;
@@ -217,8 +228,11 @@ async function scrapeAmazonData(keyword) {
     const avgRating = validRatings.length > 0 ? 
       Math.round(validRatings.reduce((sum, rating) => sum + rating, 0) / validRatings.length * 10) / 10 : 0;
     
+    // Take only first 20 items for display
+    const displayItems = items.slice(0, 20);
+    
     return { 
-      items: items, 
+      items: displayItems, 
       avgBSR, 
       avgRating, 
       avgReviews,
@@ -251,20 +265,21 @@ function calculateScores(data) {
   }
   
   // Profitability Score
-  // Green: 6+ books with BSR <= 30,000 AND reviews <= 200
-  // Yellow: 3-5 books with BSR <= 30,000 AND reviews <= 200
-  // Red: 1-2 books with BSR <= 30,000 AND reviews <= 200
+  // Green: 6+ books with BSR <= 30000 AND reviews <= 250
+  // Yellow: 4-5 books with BSR <= 30000 AND reviews <= 250
+  // Red: 3 or fewer books with BSR <= 30000 AND reviews <= 250
   function calculateProfitability(items) {
-    // Count books with BSR <= 30,000 AND reviews <= 200
+    // Count books with BSR <= 30000 AND reviews <= 250
     const profitableBooks = items.filter(item => 
       item.bsr > 0 && 
       item.bsr <= 30000 && 
-      item.reviews <= 200
+      item.reviews > 0 && 
+      item.reviews <= 250
     ).length;
     
     if (profitableBooks >= 6) {
       return { score: 'green', value: 100, count: profitableBooks };
-    } else if (profitableBooks >= 3) {
+    } else if (profitableBooks >= 4) {
       return { score: 'yellow', value: 50, count: profitableBooks };
     } else {
       return { score: 'red', value: 0, count: profitableBooks };
@@ -272,12 +287,16 @@ function calculateScores(data) {
   }
   
   // Competition Score
-  // Green: 3 books or less with reviews >= 500
-  // Yellow: 4-6 books with reviews >= 500
-  // Red: 7+ books with reviews >= 500
+  // Green: 3 books or less with BSR <= 50000 AND reviews >= 500
+  // Yellow: 4-6 books with BSR <= 50000 AND reviews >= 500
+  // Red: 7+ books with BSR <= 50000 AND reviews >= 500
   function calculateCompetition(items) {
-    // Count books with reviews >= 500
-    const competitiveBooks = items.filter(item => item.reviews >= 500).length;
+    // Count books with BSR <= 50000 AND reviews >= 500
+    const competitiveBooks = items.filter(item => 
+      item.bsr > 0 && 
+      item.bsr <= 50000 && 
+      item.reviews >= 500
+    ).length;
     
     if (competitiveBooks <= 3) {
       return { score: 'green', value: 100, count: competitiveBooks };
@@ -305,7 +324,7 @@ function calculateScores(data) {
 }
 
 // Start server
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
 });
 
