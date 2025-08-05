@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: amazon-analyzer
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
