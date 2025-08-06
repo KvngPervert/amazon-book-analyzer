@@ -1,7 +1,10 @@
 services:
   - type: web
-    name: amazon-analyzer
+    name: amazon-book-analyzer
     env: node
+    plan: free
     buildCommand: npm install
     startCommand: npm start
-    plan: free
+    envVars:
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /usr/bin/chromium-browser
